@@ -24,8 +24,12 @@ type waveBuilder struct {
 
 func (w *waveBuilder) BuildWave() error {
 	// seed := rand.New(rand.NewSource(time.Now().Unix()))
-
-	w.plotSignal([]float64{1}, 1000)
+	x := []float64{1, 1}
+	for range 58 {
+		ind := 2
+		x = append(x, float64(w.alpha1)*x[ind-1]+float64(w.alpha2)*x[ind-2]*2)
+	}
+	w.plotSignal(x, 1000)
 	return nil
 }
 
@@ -53,20 +57,20 @@ func (w *waveBuilder) parseAlpha(rawAlpha string) error {
 func (w *waveBuilder) plotSignal(signal []float64, count int) {
 	// Создаём новый график
 	p := plot.New()
-	p.Title.Text = "Линейная зависимость y = 2x + 1"
+
+	// Добавляем названия осей
 	p.X.Label.Text = "X"
 	p.Y.Label.Text = "Y"
 
-	// Данные
-	n := 20
-	pts := make(plotter.XYs, n)
-	for i := 0; i < n; i++ {
-		x := float64(i)
-		y := 2*x + 1
-		pts[i].X = x
-		pts[i].Y = y
-	}
+	// считаем координату y
+	pts := make(plotter.XYs, 10)
+	ind := 0
+	for i := range 10 {
 
+		pts[i].X = float64(i)
+		pts[i].Y = signal[ind] + signal[ind+1] + signal[ind+2] + signal[ind+3] + signal[ind+4] + signal[ind+5]
+		ind += 6
+	}
 	// Создаём линию и добавляем на график
 	line, err := plotter.NewLine(pts)
 	if err != nil {
@@ -89,7 +93,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count int) {
 	canvasImg.FillMode = canvas.ImageFillContain
 
 	window.SetContent(canvasImg)
-	window.Resize(fyne.NewSize(800, 400))
+	window.Resize(fyne.NewSize(1920, 1080))
 	window.ShowAndRun()
 }
 
