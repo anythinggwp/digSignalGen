@@ -21,20 +21,22 @@ import (
 )
 
 type waveBuilder struct {
-	alpha1 float64
-	alpha2 float64
+	alpha1     float64
+	alpha2     float64
+	waveLength uint64
 }
 
 func (w *waveBuilder) BuildWave() error {
 	seed := rand.New(rand.NewSource(time.Now().Unix()))
 
-	// x := make([]float64, 0)
-	// x = append(x, 0.65+seed.Float64()*(0.78-0.65))
-	// x = append(x, 0.65+seed.Float64()*(0.78-0.65))
-
 	yDerive := make([]float64, 0)
-	for range 100 {
-		yDerive = append(yDerive, seed.Float64()+seed.Float64()+seed.Float64()+seed.Float64()+seed.Float64()+seed.Float64())
+	for range w.waveLength {
+		yDerive = append(yDerive, seed.Float64()+
+			seed.Float64()+
+			seed.Float64()+
+			seed.Float64()+
+			seed.Float64()+
+			seed.Float64())
 	}
 	mAvg := Mean(yDerive)
 	yDeriveSecond := make([]float64, 0)
@@ -42,13 +44,13 @@ func (w *waveBuilder) BuildWave() error {
 		yDeriveSecond = append(yDeriveSecond, val-mAvg)
 	}
 
-	sigmaSq := meanSquare(yDeriveSecond) // E[v^2]
+	sigmaSq := meanSquare(yDeriveSecond)
 	sigma := math.Sqrt(sigmaSq)
 	xi := make([]float64, 0)
 	for _, val := range yDeriveSecond {
 		xi = append(xi, val/sigma)
 	}
-	sig := make([]float64, 100)
+	sig := make([]float64, w.waveLength)
 	sig[0] = 0.6
 	sig[1] = -0.1
 
@@ -56,11 +58,11 @@ func (w *waveBuilder) BuildWave() error {
 		sig[i] = float64(w.alpha1)*sig[i-1] + float64(w.alpha2)*sig[i-2] + xi[i]
 	}
 
-	w.plotSignal(sig, 100)
+	w.plotSignal(sig, w.waveLength)
 	return nil
 }
 
-func (w *waveBuilder) plotSignal(signal []float64, count int) {
+func (w *waveBuilder) plotSignal(signal []float64, count uint64) {
 	// Создаём новый график
 	p := plot.New()
 
@@ -69,7 +71,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count int) {
 	p.Y.Label.Text = "Y"
 
 	// считаем координату y
-	pts := make(plotter.XYs, 100)
+	pts := make(plotter.XYs, count)
 	// ind := 0
 	for i, val := range signal {
 		pts[i].X = float64(i)
@@ -84,7 +86,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count int) {
 
 	// Рендер в буфер
 	var buf bytes.Buffer
-	writer, _ := p.WriterTo(6*vg.Inch, 3*vg.Inch, "png")
+	writer, _ := p.WriterTo(16*vg.Inch, 9*vg.Inch, "png")
 	writer.WriteTo(&buf)
 
 	img, _ := png.Decode(&buf)
@@ -103,7 +105,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count int) {
 
 func Mean(x []float64) float64 {
 	if len(x) == 0 {
-		return 0 // или panic / error — зависит от требований
+		return 0
 	}
 
 	sum := 0.0
@@ -150,6 +152,7 @@ func meanSquare(x []float64) float64 {
 
 func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	var err error
+	// get alpha's
 	rawAlpha, err := cmd.Flags().GetString("alpha")
 	if err != nil {
 		return nil, err
@@ -158,5 +161,10 @@ func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	if err = builder.parseAlpha(rawAlpha); err != nil {
 		return nil, err
 	}
+	//get length
+	if builder.waveLength, err = cmd.Flags().GetUint64("length"); err != nil {
+		return nil, err
+	}
+
 	return builder, nil
 }
