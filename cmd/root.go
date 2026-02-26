@@ -30,8 +30,9 @@ func Init() {
 	var err error
 	rootCmd.AddCommand(genCmd)
 
-	genCmd.Flags().String("alpha", "", "setup alpha's by input alpha1|alpha2 float64 type")
+	genCmd.Flags().String("alpha", "0.2|0.7", "setup alpha's by input alpha1|alpha2 float64 type")
 	genCmd.Flags().Uint64("length", 100, "setup wave length")
+	
 
 	if err = rootCmd.Execute(); err != nil {
 		os.Exit(1)
