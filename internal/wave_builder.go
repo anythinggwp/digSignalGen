@@ -24,19 +24,18 @@ type waveBuilder struct {
 	x1         float64
 	x2         float64
 	waveLength uint64
+	rSeed      *rand.Rand
 }
 
 func (w *waveBuilder) BuildWave() error {
-	seed := rand.New(rand.NewSource(time.Now().Unix()))
-
 	yDerive := make([]float64, 0)
 	for range w.waveLength {
-		yDerive = append(yDerive, seed.Float64()+
-			seed.Float64()+
-			seed.Float64()+
-			seed.Float64()+
-			seed.Float64()+
-			seed.Float64())
+		yDerive = append(yDerive, w.rSeed.Float64()+
+			w.rSeed.Float64()+
+			w.rSeed.Float64()+
+			w.rSeed.Float64()+
+			w.rSeed.Float64()+
+			w.rSeed.Float64())
 	}
 	mAvg := Mean(yDerive)
 	yDeriveSecond := make([]float64, 0)
@@ -148,7 +147,9 @@ func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	rawX, err := cmd.Flags().GetString("init-cond")
 
 	// create wave builder
-	builder := new(waveBuilder)
+	builder := &waveBuilder{
+		rSeed: rand.New(rand.NewSource(time.Now().Unix())),
+	}
 
 	// set alpha's
 	if err = builder.parseAlpha(rawAlpha); err != nil {
@@ -162,6 +163,5 @@ func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	if builder.waveLength, err = cmd.Flags().GetUint64("length"); err != nil {
 		return nil, err
 	}
-
 	return builder, nil
 }
