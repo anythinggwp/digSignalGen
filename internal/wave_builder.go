@@ -6,8 +6,6 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,6 +21,8 @@ import (
 type waveBuilder struct {
 	alpha1     float64
 	alpha2     float64
+	x1         float64
+	x2         float64
 	waveLength uint64
 }
 
@@ -51,8 +51,8 @@ func (w *waveBuilder) BuildWave() error {
 		xi = append(xi, val/sigma)
 	}
 	sig := make([]float64, w.waveLength)
-	sig[0] = 0.6
-	sig[1] = -0.1
+	sig[0] = w.x1
+	sig[1] = w.x2
 
 	for i := 2; i < len(sig); i++ {
 		sig[i] = float64(w.alpha1)*sig[i-1] + float64(w.alpha2)*sig[i-2] + xi[i]
@@ -117,24 +117,11 @@ func Mean(x []float64) float64 {
 }
 
 func (w *waveBuilder) parseAlpha(rawAlpha string) error {
-	var err error
-	rawDate := strings.Split(rawAlpha, "|")
-	if len(rawDate) == 2 {
-		if w.alpha1, err = strconv.ParseFloat(rawDate[0], 64); err != nil {
-			return err
-		}
-		if w.alpha2, err = strconv.ParseFloat(rawDate[1], 64); err != nil {
-			return err
-		}
-	} else if len(rawDate) == 1 {
-		alpha, err := strconv.ParseFloat(rawAlpha, 64)
-		if err != nil {
-			return err
-		}
-		w.alpha1 = alpha
-		w.alpha2 = alpha
-	}
-	return nil
+	return ParseDoubleStringValueToFloat64Ptr(rawAlpha, &w.alpha1, &w.alpha2)
+}
+
+func (w *waveBuilder) parseInitCondition(rawX string) error {
+	return ParseDoubleStringValueToFloat64Ptr(rawX, &w.x1, &w.x2)
 }
 
 func meanSquare(x []float64) float64 {
@@ -152,13 +139,23 @@ func meanSquare(x []float64) float64 {
 
 func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	var err error
-	// get alpha's
+	// get alpha's from cmd
 	rawAlpha, err := cmd.Flags().GetString("alpha")
 	if err != nil {
 		return nil, err
 	}
+	// get started x's from cmd
+	rawX, err := cmd.Flags().GetString("init-cond")
+
+	// create wave builder
 	builder := new(waveBuilder)
+
+	// set alpha's
 	if err = builder.parseAlpha(rawAlpha); err != nil {
+		return nil, err
+	}
+	// set started x's
+	if err = builder.parseInitCondition(rawX); err != nil {
 		return nil, err
 	}
 	//get length
