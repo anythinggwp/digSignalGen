@@ -28,3 +28,5 @@ In root directory of project run command
 |         | `--length=<uint64>`    | `1000`      | `N`     | configuring length of generating digital wave 1 value = 1 x cordiante |
 |         | `--init-cond=<string>` | `0.6\|-0.1` | `N`     | configuring start X's for calc's in format `startX[n-1]\|startX[n-2]` |
 |         |                        |             |         | example : `--init-cond=-0.1\|0.6`                                     |
+|         | `--disable-output`     | `false`     | `N`     | disable gui graph output                                              |
+|         | `--save-file=<string>` | `""`        | `N`     | path for saving generated graph if empty dsg will not save nothing    |

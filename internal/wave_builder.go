@@ -3,9 +3,11 @@ package internal
 import (
 	"bytes"
 	"image/png"
+	"io"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,16 +21,18 @@ import (
 )
 
 type waveBuilder struct {
-	alpha1     float64
-	alpha2     float64
-	x1         float64
-	x2         float64
-	waveLength uint64
-	rSeed      *rand.Rand
+	alpha1        float64
+	alpha2        float64
+	x1            float64
+	x2            float64
+	waveLength    uint64
+	rSeed         *rand.Rand
+	savePath      string
+	disableOutput bool
 }
 
-func (w *waveBuilder) BuildWave() error {
-	yDerive := make([]float64, 0)
+func (w *waveBuilder) BuildWave() (err error) {
+	yDerive := make([]float64, 0, w.waveLength)
 	for range w.waveLength {
 		yDerive = append(yDerive, w.rSeed.Float64()+
 			w.rSeed.Float64()+
@@ -38,14 +42,14 @@ func (w *waveBuilder) BuildWave() error {
 			w.rSeed.Float64())
 	}
 	mAvg := Mean(yDerive)
-	yDeriveSecond := make([]float64, 0)
+	yDeriveSecond := make([]float64, 0, len(yDerive))
 	for _, val := range yDerive {
 		yDeriveSecond = append(yDeriveSecond, val-mAvg)
 	}
 
 	sigmaSq := meanSquare(yDeriveSecond)
 	sigma := math.Sqrt(sigmaSq)
-	xi := make([]float64, 0)
+	xi := make([]float64, 0, len(yDeriveSecond))
 	for _, val := range yDeriveSecond {
 		xi = append(xi, val/sigma)
 	}
@@ -57,11 +61,21 @@ func (w *waveBuilder) BuildWave() error {
 		sig[i] = float64(w.alpha1)*sig[i-1] + float64(w.alpha2)*sig[i-2] + xi[i]
 	}
 
-	w.plotSignal(sig, w.waveLength)
+	byt := w.drawWave(sig)
+	if w.savePath != "" {
+		if err = w.saveFile(byt); err != nil {
+			return
+		}
+	}
+	if !w.disableOutput {
+		if err = w.outputGraph(byt); err != nil {
+			return
+		}
+	}
 	return nil
 }
 
-func (w *waveBuilder) plotSignal(signal []float64, count uint64) {
+func (w *waveBuilder) drawWave(signal []float64) bytes.Buffer {
 	// Создаём новый график
 	p := plot.New()
 
@@ -70,7 +84,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count uint64) {
 	p.Y.Label.Text = "Y"
 
 	// считаем координату y
-	pts := make(plotter.XYs, count)
+	pts := make(plotter.XYs, w.waveLength)
 	// ind := 0
 	for i, val := range signal {
 		pts[i].X = float64(i)
@@ -82,15 +96,29 @@ func (w *waveBuilder) plotSignal(signal []float64, count uint64) {
 		log.Fatalf("Ошибка при создании линии: %v", err)
 	}
 	p.Add(line)
-
 	// Рендер в буфер
 	var buf bytes.Buffer
 	writer, _ := p.WriterTo(16*vg.Inch, 9*vg.Inch, "png")
 	writer.WriteTo(&buf)
 
-	img, _ := png.Decode(&buf)
+	return buf
 
-	// --- GUI ---
+}
+
+func (w *waveBuilder) saveFile(byt bytes.Buffer) (err error) {
+	var file *os.File
+
+	if file, err = os.OpenFile(w.savePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755); err != nil {
+		return
+	}
+	defer file.Close()
+	_, err = io.Copy(file, &byt)
+
+	return
+}
+
+func (w *waveBuilder) outputGraph(byt bytes.Buffer) (err error) {
+	img, _ := png.Decode(&byt)
 	a := app.New()
 	window := a.NewWindow("Signal Plot")
 
@@ -100,6 +128,7 @@ func (w *waveBuilder) plotSignal(signal []float64, count uint64) {
 	window.SetContent(canvasImg)
 	window.Resize(fyne.NewSize(1920, 1080))
 	window.ShowAndRun()
+	return
 }
 
 func Mean(x []float64) float64 {
@@ -138,6 +167,7 @@ func meanSquare(x []float64) float64 {
 
 func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	var err error
+
 	// get alpha's from cmd
 	rawAlpha, err := cmd.Flags().GetString("alpha")
 	if err != nil {
@@ -163,5 +193,14 @@ func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	if builder.waveLength, err = cmd.Flags().GetUint64("length"); err != nil {
 		return nil, err
 	}
+
+	if builder.disableOutput, err = cmd.Flags().GetBool("disable-output"); err != nil {
+		return nil, err
+	}
+
+	if builder.savePath, err = cmd.Flags().GetString("save-file"); err != nil {
+		return nil, err
+	}
+
 	return builder, nil
 }
