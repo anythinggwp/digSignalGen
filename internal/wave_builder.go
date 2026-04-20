@@ -8,6 +8,9 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -21,6 +24,7 @@ import (
 )
 
 type waveBuilder struct {
+	cmd           *cobra.Command
 	alpha1        float64
 	alpha2        float64
 	x1            float64
@@ -29,6 +33,9 @@ type waveBuilder struct {
 	rSeed         *rand.Rand
 	savePath      string
 	disableOutput bool
+	growingGraph  bool
+	decreaseGraph bool
+	waveParts     uint64
 }
 
 func (w *waveBuilder) BuildWave() (err error) {
@@ -61,9 +68,45 @@ func (w *waveBuilder) BuildWave() (err error) {
 		sig[i] = float64(w.alpha1)*sig[i-1] + float64(w.alpha2)*sig[i-2] + xi[i]
 	}
 
+	if w.growingGraph {
+		for i := 0; i < len(sig); i++ {
+			sig[i] = sig[i] + float64(i)/100
+		}
+	} else if w.decreaseGraph {
+		for i := 0; i < len(sig); i++ {
+			sig[i] = sig[i] - float64(i)/100
+		}
+	}
+
+	if w.waveParts > 1 {
+		partsStdDiv := make([]float64, 0, w.waveParts)
+		partSize := w.waveLength / w.waveParts
+		for i := uint64(0); i < uint64(len(sig)); i += partSize {
+			if w.savePath != "" {
+				byt := w.drawWave(sig[i : i+partSize])
+
+				if err = w.saveFile("test_"+strconv.Itoa(int(i))+".png", byt); err != nil {
+					return
+				}
+			}
+			avgX := Mean(sig[i : i+partSize])
+			sqSum := sqSum(sig[i:i+partSize], avgX)
+			variance := sqSum / float64(partSize)
+			stdDiv := math.Sqrt(variance)
+			log.Default().Printf("Avg part %v avgX: %v; sqSum: %v; stdDiv: %v; ", i, avgX, sqSum, stdDiv)
+			partsStdDiv = append(partsStdDiv, stdDiv)
+
+		}
+		mStdDiv := Median(partsStdDiv)
+		log.Default().Printf("mStdDiv: %v;", mStdDiv)
+		series, signs := RunsByMedian(partsStdDiv, mStdDiv)
+		log.Default().Printf("Series: %v; Signs: %v", series, signs)
+
+	}
+
 	byt := w.drawWave(sig)
 	if w.savePath != "" {
-		if err = w.saveFile(byt); err != nil {
+		if err = w.saveFile("test.png", byt); err != nil {
 			return
 		}
 	}
@@ -84,7 +127,7 @@ func (w *waveBuilder) drawWave(signal []float64) bytes.Buffer {
 	p.Y.Label.Text = "Y"
 
 	// считаем координату y
-	pts := make(plotter.XYs, w.waveLength)
+	pts := make(plotter.XYs, len(signal))
 	// ind := 0
 	for i, val := range signal {
 		pts[i].X = float64(i)
@@ -105,10 +148,10 @@ func (w *waveBuilder) drawWave(signal []float64) bytes.Buffer {
 
 }
 
-func (w *waveBuilder) saveFile(byt bytes.Buffer) (err error) {
+func (w *waveBuilder) saveFile(fileName string, byt bytes.Buffer) (err error) {
 	var file *os.File
 
-	if file, err = os.OpenFile(w.savePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755); err != nil {
+	if file, err = os.OpenFile(path.Join(w.savePath, fileName), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0755); err != nil {
 		return
 	}
 	defer file.Close()
@@ -142,6 +185,67 @@ func Mean(x []float64) float64 {
 	}
 
 	return sum / float64(len(x))
+}
+
+func sqSum(x []float64, avgX float64) (sqSum float64) {
+	for _, v := range x {
+		diff := v - avgX
+		sqSum += diff * diff
+	}
+
+	return
+}
+
+func Median(values []float64) float64 {
+	n := len(values)
+	if n == 0 {
+		return 0
+	}
+
+	cp := make([]float64, n)
+	copy(cp, values)
+	sort.Float64s(cp)
+
+	mid := n / 2
+	if n%2 == 1 {
+		return cp[mid]
+	}
+	return (cp[mid-1] + cp[mid]) / 2
+}
+
+func RunsByMedian(data []float64, mStdDiv float64) (runs int, signs []bool) {
+	if len(data) == 0 {
+		return 0, nil
+	}
+
+	// median = Median(data)
+
+	for _, v := range data {
+		if v > mStdDiv {
+			signs = append(signs, true)
+		} else if v < mStdDiv {
+			signs = append(signs, false)
+		}
+		// равные медиане пропускаем
+	}
+
+	runs = CountRuns(signs)
+	return runs, signs
+}
+
+func CountRuns(signs []bool) int {
+	if len(signs) == 0 {
+		return 0
+	}
+
+	runs := 1
+	for i := 1; i < len(signs); i++ {
+		if signs[i] != signs[i-1] {
+			runs++
+		}
+	}
+
+	return runs
 }
 
 func (w *waveBuilder) parseAlpha(rawAlpha string) error {
@@ -201,6 +305,17 @@ func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {
 	if builder.savePath, err = cmd.Flags().GetString("save-file"); err != nil {
 		return nil, err
 	}
-
+	if builder.waveParts, err = cmd.Flags().GetUint64("parts"); err != nil {
+		return nil, err
+	}
+	if builder.waveParts == 0 {
+		builder.waveParts = 1
+	}
+	if builder.growingGraph, err = cmd.Flags().GetBool("growing-graph"); err != nil {
+		return nil, err
+	}
+	if builder.decreaseGraph, err = cmd.Flags().GetBool("decrease-graph"); err != nil {
+		return nil, err
+	}
 	return builder, nil
 }
