@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"fmt"
 	"image/png"
 	"io"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"sort"
 	"strconv"
 	"time"
 
@@ -21,6 +21,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
+
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 type waveBuilder struct {
@@ -81,27 +83,74 @@ func (w *waveBuilder) BuildWave() (err error) {
 	if w.waveParts > 1 {
 		partsStdDiv := make([]float64, 0, w.waveParts)
 		partSize := w.waveLength / w.waveParts
+
+		tw := table.NewWriter()
+
+		tw.AppendHeader(table.Row{
+			"Part/Отрезок",
+			"Start/Начало",
+			"End/Конец",
+			"AvgX/Ср.Х",
+			"SqSum/Cумма кв.откл.",
+			"Variance/Дисперсия",
+			"StdDiv/Ст. отклонение",
+		})
+
+		partNum := 1
+
 		for i := uint64(0); i < uint64(len(sig)); i += partSize {
+			end := i + partSize
+			if end > uint64(len(sig)) {
+				end = uint64(len(sig))
+			}
+
+			part := sig[i:end]
+
 			if w.savePath != "" {
-				byt := w.drawWave(sig[i : i+partSize])
+				byt := w.drawWave(part)
 
 				if err = w.saveFile("test_"+strconv.Itoa(int(i))+".png", byt); err != nil {
 					return
 				}
 			}
-			avgX := Mean(sig[i : i+partSize])
-			sqSum := sqSum(sig[i:i+partSize], avgX)
-			variance := sqSum / float64(partSize)
+
+			avgX := Mean(part)
+			sq := sqSum(part, avgX)
+			variance := sq / float64(len(part))
 			stdDiv := math.Sqrt(variance)
-			log.Default().Printf("Avg part %v avgX: %v; sqSum: %v; stdDiv: %v; ", i, avgX, sqSum, stdDiv)
+
 			partsStdDiv = append(partsStdDiv, stdDiv)
 
-		}
-		mStdDiv := Median(partsStdDiv)
-		log.Default().Printf("mStdDiv: %v;", mStdDiv)
-		series, signs := RunsByMedian(partsStdDiv, mStdDiv)
-		log.Default().Printf("Series: %v; Signs: %v", series, signs)
+			tw.AppendRow(table.Row{
+				partNum,
+				i,
+				end,
+				fmt.Sprintf("%.6f", avgX),
+				fmt.Sprintf("%.6f", sq),
+				fmt.Sprintf("%.6f", variance),
+				fmt.Sprintf("%.6f", stdDiv),
+			})
 
+			partNum++
+		}
+
+		fmt.Println("\nParts info:")
+		fmt.Println(tw.Render())
+
+		mStdDiv := Median(partsStdDiv)
+		series, signs := RunsByMedian(partsStdDiv, mStdDiv)
+
+		summaryTable := table.NewWriter()
+
+		summaryTable.AppendHeader(table.Row{"Metric/Метрика", "Value/Значение"})
+		summaryTable.AppendRows([]table.Row{
+			{"Median StdDiv/ Медиана откл.", fmt.Sprintf("%.6f", mStdDiv)},
+			{"Series/Серии", fmt.Sprintf("%v", series)},
+			{"Signs/Знаки", fmt.Sprintf("%v", signs)},
+		})
+
+		fmt.Println("\nSummary:")
+		fmt.Println(summaryTable.Render())
 	}
 
 	byt := w.drawWave(sig)
@@ -174,99 +223,12 @@ func (w *waveBuilder) outputGraph(byt bytes.Buffer) (err error) {
 	return
 }
 
-func Mean(x []float64) float64 {
-	if len(x) == 0 {
-		return 0
-	}
-
-	sum := 0.0
-	for _, v := range x {
-		sum += v
-	}
-
-	return sum / float64(len(x))
-}
-
-func sqSum(x []float64, avgX float64) (sqSum float64) {
-	for _, v := range x {
-		diff := v - avgX
-		sqSum += diff * diff
-	}
-
-	return
-}
-
-func Median(values []float64) float64 {
-	n := len(values)
-	if n == 0 {
-		return 0
-	}
-
-	cp := make([]float64, n)
-	copy(cp, values)
-	sort.Float64s(cp)
-
-	mid := n / 2
-	if n%2 == 1 {
-		return cp[mid]
-	}
-	return (cp[mid-1] + cp[mid]) / 2
-}
-
-func RunsByMedian(data []float64, mStdDiv float64) (runs int, signs []bool) {
-	if len(data) == 0 {
-		return 0, nil
-	}
-
-	// median = Median(data)
-
-	for _, v := range data {
-		if v > mStdDiv {
-			signs = append(signs, true)
-		} else if v < mStdDiv {
-			signs = append(signs, false)
-		}
-		// равные медиане пропускаем
-	}
-
-	runs = CountRuns(signs)
-	return runs, signs
-}
-
-func CountRuns(signs []bool) int {
-	if len(signs) == 0 {
-		return 0
-	}
-
-	runs := 1
-	for i := 1; i < len(signs); i++ {
-		if signs[i] != signs[i-1] {
-			runs++
-		}
-	}
-
-	return runs
-}
-
 func (w *waveBuilder) parseAlpha(rawAlpha string) error {
 	return ParseDoubleStringValueToFloat64Ptr(rawAlpha, &w.alpha1, &w.alpha2)
 }
 
 func (w *waveBuilder) parseInitCondition(rawX string) error {
 	return ParseDoubleStringValueToFloat64Ptr(rawX, &w.x1, &w.x2)
-}
-
-func meanSquare(x []float64) float64 {
-	if len(x) == 0 {
-		return 0
-	}
-
-	sum := 0.0
-	for _, v := range x {
-		sum += v * v
-	}
-
-	return sum / float64(len(x))
 }
 
 func NewWaveBuilder(cmd *cobra.Command) (*waveBuilder, error) {

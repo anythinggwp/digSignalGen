@@ -30,3 +30,5 @@ In root directory of project run command
 |         |                        |             |         | example : `--init-cond=-0.1\|0.6`                                     |
 |         | `--disable-output`     | `false`     | `N`     | disable gui graph output                                              |
 |         | `--save-file=<string>` | `""`        | `N`     | path for saving generated graph if empty dsg will not save nothing    |
+|         | `--growing-graph`      | `false`     | `N`     | generate growing wave                                                 |
+|         | `--decrease-graph`     | `false`     | `N`     | generate decreasing wave                                              |
