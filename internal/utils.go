@@ -85,6 +85,22 @@ func RunsByMedian(data []float64, mStdDiv float64) (runs int, signs []string) {
 	return runs, signs
 }
 
+func CountInversions(x []float64) (int, []int) {
+	visualRepresent := make([]int, len(x))
+	count := 0
+
+	for i := 0; i < len(x)-1; i++ {
+		for j := i + 1; j < len(x); j++ {
+			if x[i] < x[j] {
+				count++
+				visualRepresent[i]++
+			}
+		}
+	}
+
+	return count, visualRepresent
+}
+
 func CountRuns(signs []string) int {
 	if len(signs) == 0 {
 		return 0

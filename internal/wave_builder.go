@@ -139,6 +139,7 @@ func (w *waveBuilder) BuildWave() (err error) {
 
 		mStdDiv := Median(partsStdDiv)
 		series, signs := RunsByMedian(partsStdDiv, mStdDiv)
+		inverCount, inverVisualRep := CountInversions(partsStdDiv)
 
 		summaryTable := table.NewWriter()
 
@@ -147,6 +148,8 @@ func (w *waveBuilder) BuildWave() (err error) {
 			{"Median StdDiv/ Медиана откл.", fmt.Sprintf("%.6f", mStdDiv)},
 			{"Series/Серии", fmt.Sprintf("%v", series)},
 			{"Signs/Знаки", fmt.Sprintf("%v", signs)},
+			{"Inversions/Инверсии", fmt.Sprintf("%v", inverCount)},
+			{"Inversions per part/Инверсии для каждого отрезка", fmt.Sprintf("%v", inverVisualRep)},
 		})
 
 		fmt.Println("\nSummary:")
